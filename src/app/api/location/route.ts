@@ -158,11 +158,12 @@ function ipLocationFromMeta(
   return {
     latitude: meta.ipLatitude,
     longitude: meta.ipLongitude,
-    accuracy: null,
+    // IP geo is city-level only (~5–50km error) — NOT exact GPS
+    accuracy: 25000,
     altitude: null,
     heading: null,
     speed: null,
-    source: meta.geoSource === "vercel" ? "ip" : "ip",
+    source: "ip_approx",
     city: meta.city,
     region: meta.region,
     country: meta.country,
@@ -268,11 +269,13 @@ export async function POST(req: NextRequest) {
     };
 
     const primaryFrom = (list: ILocationPoint[]) => {
-      // Prefer latest GPS over IP
-      const gpsLast = [...list].reverse().find((p) => p.source === "gps");
-      const last = gpsLast || list[list.length - 1];
-      if (!last) return null;
-      return last;
+      // ALWAYS prefer real GPS over IP approx (IP can show wrong country e.g. USA)
+      const gpsLast = [...list]
+        .reverse()
+        .find((p) => p.source === "gps" || p.source === "network");
+      if (gpsLast) return gpsLast;
+      const last = list[list.length - 1];
+      return last || null;
     };
 
     // ---- UPDATE by visitId ----

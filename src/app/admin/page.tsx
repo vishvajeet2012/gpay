@@ -332,7 +332,13 @@ export default function AdminDashboard() {
                                 >
                                   <div className="flex items-center justify-between gap-2">
                                     <span className="text-[11px] font-semibold uppercase text-white/50">
-                                      #{i + 1} · {p.source || "unknown"}
+                                      #{i + 1} ·{" "}
+                                      {p.source === "gps"
+                                        ? "GPS (exact)"
+                                        : p.source === "ip_approx" ||
+                                            p.source === "ip"
+                                          ? "IP (approx — not exact)"
+                                          : p.source || "unknown"}
                                     </span>
                                     {p.mapsUrl ? (
                                       <a
