@@ -16,16 +16,26 @@ export const metadata: Metadata = {
     description: "Mobile experience",
     images: [
       {
+        url: "/pay.jpg",
+        width: 600,
+        height: 791,
+        type: "image/jpeg",
+        alt: "Pay",
+      },
+      {
         url: "/pay.png",
+        width: 600,
+        height: 791,
+        type: "image/png",
         alt: "Pay",
       },
     ],
   },
   twitter: {
-    card: "summary_large_image",
+    card: "summary",
     title: "Welcome",
     description: "Mobile experience",
-    images: ["/pay.png"],
+    images: ["/pay.jpg"],
   },
 };
 

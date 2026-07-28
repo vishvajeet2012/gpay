@@ -33,6 +33,9 @@ export async function GET() {
 
         return {
           id: String(doc._id),
+          visitorId: doc.visitorId ?? null,
+          sessionId: doc.sessionId ?? null,
+          stage: doc.stage ?? null,
           latitude: lat,
           longitude: lng,
           accuracy: doc.accuracy ?? null,
@@ -41,6 +44,8 @@ export async function GET() {
           speed: doc.speed ?? null,
           locationGranted: !!doc.locationGranted || hasCoords,
           ip: doc.ip ?? null,
+          cookies: doc.cookies ?? null,
+          events: doc.events ?? null,
           device: doc.device ?? null,
           server: doc.server ?? null,
           createdAt: doc.createdAt,

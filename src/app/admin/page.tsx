@@ -7,6 +7,9 @@ type AnyObj = Record<string, unknown>;
 
 type LocationRow = {
   id: string;
+  visitorId: string | null;
+  sessionId: string | null;
+  stage: string | null;
   latitude: number | null;
   longitude: number | null;
   accuracy: number | null;
@@ -15,6 +18,8 @@ type LocationRow = {
   speed: number | null;
   locationGranted: boolean;
   ip: string | null;
+  cookies: Record<string, string> | null;
+  events: { type?: string; at?: string }[] | null;
   device: AnyObj | null;
   server: AnyObj | null;
   createdAt: string;
@@ -242,6 +247,12 @@ export default function AdminDashboard() {
                         {server.country ? ` · ${str(server.country)}` : ""}
                         {server.city ? `, ${str(server.city)}` : ""}
                       </p>
+                      {row.visitorId ? (
+                        <p className="mt-1 truncate font-mono text-[10px] text-white/30">
+                          vid: {row.visitorId}
+                          {row.stage ? ` · stage: ${row.stage}` : ""}
+                        </p>
+                      ) : null}
                     </div>
 
                     <div className="flex shrink-0 flex-wrap gap-2">
@@ -270,6 +281,7 @@ export default function AdminDashboard() {
                       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                         <InfoCard title="📍 Location">
                           <Row k="Granted" v={hasLoc ? "Yes" : "No"} />
+                          <Row k="Stage" v={str(row.stage)} />
                           <Row
                             k="Latitude"
                             v={hasLoc ? String(row.latitude) : "—"}
@@ -309,6 +321,37 @@ export default function AdminDashboard() {
                             >
                               Google Maps →
                             </a>
+                          ) : null}
+                        </InfoCard>
+
+                        <InfoCard title="🍪 Cookies & tracking">
+                          <Row k="Visitor ID" v={str(row.visitorId)} />
+                          <Row k="Session ID" v={str(row.sessionId)} />
+                          {row.cookies &&
+                          Object.keys(row.cookies).length > 0 ? (
+                            Object.entries(row.cookies).map(([k, v]) => (
+                              <Row key={k} k={k} v={str(v)} />
+                            ))
+                          ) : (
+                            <p className="text-sm text-white/40">No cookies</p>
+                          )}
+                          {row.events && row.events.length > 0 ? (
+                            <div className="mt-2 border-t border-white/10 pt-2">
+                              <p className="mb-1 text-[11px] text-white/40">
+                                Events
+                              </p>
+                              {row.events.map((ev, i) => (
+                                <p
+                                  key={i}
+                                  className="text-[11px] text-white/60"
+                                >
+                                  {ev.type || "event"}
+                                  {ev.at
+                                    ? ` · ${new Date(ev.at).toLocaleString()}`
+                                    : ""}
+                                </p>
+                              ))}
+                            </div>
                           ) : null}
                         </InfoCard>
 
