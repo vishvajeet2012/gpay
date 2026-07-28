@@ -8,8 +8,16 @@ const roboto = Roboto({
   variable: "--font-roboto",
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+  ? process.env.NEXT_PUBLIC_SITE_URL.startsWith("http")
+    ? process.env.NEXT_PUBLIC_SITE_URL
+    : `https://${process.env.NEXT_PUBLIC_SITE_URL}`
+  : process.env.VERCEL_URL
+  ? `https://${process.env.VERCEL_URL}`
+  : "http://localhost:3000";
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
+  metadataBase: new URL(siteUrl),
   title: "Google Pay - Payment Sent",
   description: "Payment of ₹20,000.00 sent successfully to RAHUL MEENA via Google Pay.",
   openGraph: {
@@ -20,10 +28,10 @@ export const metadata: Metadata = {
     siteName: "Google Pay",
     images: [
       {
-        url: "/og-image.jpg",
+        url: "/og-image.png",
         width: 600,
-        height: 792,
-        type: "image/jpeg",
+        height: 791,
+        type: "image/png",
         alt: "Google Pay Payment Sent - ₹20,000.00 to RAHUL MEENA",
       },
     ],
@@ -32,7 +40,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Google Pay - Payment Sent",
     description: "Payment of ₹20,000.00 sent successfully to RAHUL MEENA via Google Pay.",
-    images: ["/og-image.jpg"],
+    images: ["/og-image.png"],
   },
 };
 
