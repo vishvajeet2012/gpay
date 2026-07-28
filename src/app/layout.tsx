@@ -9,26 +9,30 @@ const roboto = Roboto({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
   title: "Google Pay - Payment Sent",
   description: "Payment of ₹20,000.00 sent successfully to RAHUL MEENA via Google Pay.",
   openGraph: {
     title: "Google Pay - Payment Sent",
     description: "Payment of ₹20,000.00 sent successfully to RAHUL MEENA via Google Pay.",
+    type: "website",
+    locale: "en_US",
+    siteName: "Google Pay",
     images: [
       {
-        url: "/pay.jpg",
+        url: "/og-image.jpg",
         width: 600,
-        height: 791,
+        height: 792,
         type: "image/jpeg",
-        alt: "Google Pay Payment Sent",
+        alt: "Google Pay Payment Sent - ₹20,000.00 to RAHUL MEENA",
       },
     ],
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "Google Pay - Payment Sent",
     description: "Payment of ₹20,000.00 sent successfully to RAHUL MEENA via Google Pay.",
-    images: ["/pay.jpg"],
+    images: ["/og-image.jpg"],
   },
 };
 
