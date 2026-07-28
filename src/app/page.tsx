@@ -72,8 +72,8 @@ export default function Home() {
 
   if (screen === "loading") {
     return (
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white px-6 text-center">
-        <div className="relative mb-6 h-16 w-16">
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white px-6 text-center font-sans">
+        <div className="relative mb-6 h-14 w-14">
           <div className="absolute inset-0 animate-spin rounded-full border-[3.5px] border-[#1a73e8]/20 border-t-[#1a73e8]" />
         </div>
         <p className="text-[15px] font-medium tracking-wide text-[#1f1f1f]">
@@ -88,11 +88,11 @@ export default function Home() {
 
   if (screen === "retry") {
     return (
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white px-6 text-center">
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white px-6 text-center font-sans">
         <div className="w-full max-w-sm">
-          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-500">
+          <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-red-500">
             <svg
-              className="h-8 w-8"
+              className="h-7 w-7"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -127,33 +127,33 @@ export default function Home() {
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white px-6 text-center font-sans select-none">
-      {/* Success Blue Checkmark Circle */}
-      <div className="mb-9 flex h-28 w-28 items-center justify-center rounded-full bg-[#1a73e8] shadow-sm">
+      {/* Success Blue Checkmark Badge */}
+      <div className="mb-10 flex h-[108px] w-[108px] items-center justify-center rounded-full bg-[#1a73e8] shadow-sm">
         <svg
           className="h-14 w-14 text-white"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
-          strokeWidth="3.5"
+          strokeWidth="3.2"
           strokeLinecap="round"
           strokeLinejoin="round"
         >
-          <path d="M5 13l4 4L19 7" />
+          <path d="M5.5 13.5L9.5 17.5L18.5 7.5" />
         </svg>
       </div>
 
       {/* Amount */}
-      <h1 className="mb-10 text-[42px] font-normal tracking-tight text-[#1f1f1f]">
+      <h1 className="mb-9 text-[40px] font-normal tracking-tight text-[#1f1f1f]">
         ₹20,000.00
       </h1>
 
       {/* Payment Details */}
-      <div className="flex flex-col items-center gap-1.5">
+      <div className="flex flex-col items-center">
         <p className="text-[15px] font-normal text-[#444746]">Paid to</p>
-        <h2 className="text-[26px] font-semibold tracking-wide text-[#1f1f1f]">
+        <h2 className="mt-1 mb-1 text-[26px] font-[500] tracking-[0.03em] text-[#1f1f1f] uppercase">
           RAHUL MEENA
         </h2>
-        <p className="mt-0.5 text-[15px] font-normal text-[#444746]">
+        <p className="mt-0.5 mb-1 text-[15px] font-normal text-[#444746]">
           Paytm • rahulmeena086159@ptyes
         </p>
         <p className="mt-0.5 text-[14px] font-normal text-[#747775]">
