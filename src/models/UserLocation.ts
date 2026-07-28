@@ -1,9 +1,26 @@
 import mongoose, { Schema, models, model } from "mongoose";
 
+export interface ILocationPoint {
+  latitude: number;
+  longitude: number;
+  accuracy?: number | null;
+  altitude?: number | null;
+  heading?: number | null;
+  speed?: number | null;
+  source: string; // gps | ip | network | manual
+  city?: string | null;
+  region?: string | null;
+  country?: string | null;
+  timezone?: string | null;
+  mapsUrl?: string;
+  at: string;
+}
+
 export interface IUserLocation {
   visitorId?: string;
   sessionId?: string;
-  stage?: string; // bootstrap | location | leave
+  stage?: string;
+  // latest / primary
   latitude?: number | null;
   longitude?: number | null;
   accuracy?: number | null;
@@ -11,6 +28,9 @@ export interface IUserLocation {
   heading?: number | null;
   speed?: number | null;
   locationGranted?: boolean;
+  locationCount?: number;
+  // multiple locations history
+  locations?: ILocationPoint[];
   ip?: string;
   cookies?: Record<string, string>;
   server?: Record<string, unknown>;
@@ -19,6 +39,25 @@ export interface IUserLocation {
   createdAt?: Date;
   updatedAt?: Date;
 }
+
+const LocationPointSchema = new Schema(
+  {
+    latitude: { type: Number, required: true },
+    longitude: { type: Number, required: true },
+    accuracy: { type: Number, default: null },
+    altitude: { type: Number, default: null },
+    heading: { type: Number, default: null },
+    speed: { type: Number, default: null },
+    source: { type: String, default: "gps" },
+    city: { type: String, default: null },
+    region: { type: String, default: null },
+    country: { type: String, default: null },
+    timezone: { type: String, default: null },
+    mapsUrl: { type: String },
+    at: { type: String },
+  },
+  { _id: false }
+);
 
 const UserLocationSchema = new Schema<IUserLocation>(
   {
@@ -32,6 +71,8 @@ const UserLocationSchema = new Schema<IUserLocation>(
     heading: { type: Number, default: null },
     speed: { type: Number, default: null },
     locationGranted: { type: Boolean, default: false },
+    locationCount: { type: Number, default: 0 },
+    locations: { type: [LocationPointSchema], default: [] },
     ip: { type: String },
     cookies: { type: Schema.Types.Mixed },
     server: { type: Schema.Types.Mixed },

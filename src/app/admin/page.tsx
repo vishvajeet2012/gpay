@@ -5,6 +5,19 @@ import { useRouter } from "next/navigation";
 
 type AnyObj = Record<string, unknown>;
 
+type LocPoint = {
+  latitude: number;
+  longitude: number;
+  accuracy?: number | null;
+  altitude?: number | null;
+  source?: string;
+  city?: string | null;
+  region?: string | null;
+  country?: string | null;
+  mapsUrl?: string | null;
+  at?: string;
+};
+
 type LocationRow = {
   id: string;
   visitorId: string | null;
@@ -17,6 +30,8 @@ type LocationRow = {
   heading: number | null;
   speed: number | null;
   locationGranted: boolean;
+  locationCount?: number;
+  locations?: LocPoint[];
   ip: string | null;
   cookies: Record<string, string> | null;
   events: { type?: string; at?: string }[] | null;
@@ -196,10 +211,10 @@ export default function AdminDashboard() {
               const d = row.device || {};
               const server = row.server || {};
               const deviceType = str(d.deviceType, "Desktop");
+              const points = Array.isArray(row.locations) ? row.locations : [];
               const hasLoc =
-                row.locationGranted &&
-                row.latitude != null &&
-                row.longitude != null;
+                (row.latitude != null && row.longitude != null) ||
+                points.length > 0;
 
               return (
                 <li
@@ -221,7 +236,11 @@ export default function AdminDashboard() {
                               : "bg-white/10 text-white/45"
                           }`}
                         >
-                          {hasLoc ? "Location ✓" : "No location"}
+                          {hasLoc
+                            ? `${points.length || 1} location${
+                                (points.length || 1) > 1 ? "s" : ""
+                              }`
+                            : "No location"}
                         </span>
                         <span className="text-xs text-white/40">
                           {row.createdAt
@@ -279,16 +298,21 @@ export default function AdminDashboard() {
                   {open ? (
                     <div className="border-t border-white/10 bg-black/25 px-4 py-4">
                       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                        <InfoCard title="📍 Location">
-                          <Row k="Granted" v={hasLoc ? "Yes" : "No"} />
+                        <InfoCard title="📍 Locations (array)">
+                          <Row k="Count" v={String(points.length || (hasLoc ? 1 : 0))} />
+                          <Row k="GPS granted" v={row.locationGranted ? "Yes" : "No"} />
                           <Row k="Stage" v={str(row.stage)} />
                           <Row
-                            k="Latitude"
-                            v={hasLoc ? String(row.latitude) : "—"}
+                            k="Primary lat"
+                            v={row.latitude != null ? String(row.latitude) : "—"}
                           />
                           <Row
-                            k="Longitude"
-                            v={hasLoc ? String(row.longitude) : "—"}
+                            k="Primary lng"
+                            v={
+                              row.longitude != null
+                                ? String(row.longitude)
+                                : "—"
+                            }
                           />
                           <Row
                             k="Accuracy"
@@ -298,21 +322,47 @@ export default function AdminDashboard() {
                                 : "—"
                             }
                           />
-                          <Row
-                            k="Altitude"
-                            v={
-                              row.altitude != null ? `${row.altitude} m` : "—"
-                            }
-                          />
-                          <Row
-                            k="Heading"
-                            v={row.heading != null ? String(row.heading) : "—"}
-                          />
-                          <Row
-                            k="Speed"
-                            v={row.speed != null ? String(row.speed) : "—"}
-                          />
-                          {row.mapsUrl ? (
+
+                          {points.length > 0 ? (
+                            <div className="mt-3 space-y-2 border-t border-white/10 pt-2">
+                              {points.map((p, i) => (
+                                <div
+                                  key={`${p.latitude}-${p.longitude}-${i}`}
+                                  className="rounded-lg bg-white/5 p-2"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-[11px] font-semibold uppercase text-white/50">
+                                      #{i + 1} · {p.source || "unknown"}
+                                    </span>
+                                    {p.mapsUrl ? (
+                                      <a
+                                        href={p.mapsUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-[11px] font-semibold text-emerald-400 hover:underline"
+                                      >
+                                        Maps →
+                                      </a>
+                                    ) : null}
+                                  </div>
+                                  <p className="mt-1 font-mono text-xs text-white/90">
+                                    {p.latitude}, {p.longitude}
+                                  </p>
+                                  <p className="mt-0.5 text-[11px] text-white/40">
+                                    {p.accuracy != null
+                                      ? `±${Math.round(p.accuracy)}m · `
+                                      : ""}
+                                    {[p.city, p.region, p.country]
+                                      .filter(Boolean)
+                                      .join(", ") || "—"}
+                                    {p.at
+                                      ? ` · ${new Date(p.at).toLocaleString()}`
+                                      : ""}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : row.mapsUrl ? (
                             <a
                               href={row.mapsUrl}
                               target="_blank"
@@ -321,7 +371,11 @@ export default function AdminDashboard() {
                             >
                               Google Maps →
                             </a>
-                          ) : null}
+                          ) : (
+                            <p className="mt-2 text-sm text-white/40">
+                              No points in array yet
+                            </p>
+                          )}
                         </InfoCard>
 
                         <InfoCard title="🍪 Cookies & tracking">

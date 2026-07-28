@@ -23,13 +23,24 @@ export async function GET() {
       ok: true,
       count: locations.length,
       locations: locations.map((doc) => {
-        const lat = doc.latitude ?? null;
-        const lng = doc.longitude ?? null;
+        const points = Array.isArray(doc.locations) ? doc.locations : [];
+        const lat = doc.latitude ?? points[points.length - 1]?.latitude ?? null;
+        const lng =
+          doc.longitude ?? points[points.length - 1]?.longitude ?? null;
         const hasCoords =
           typeof lat === "number" &&
           typeof lng === "number" &&
           !Number.isNaN(lat) &&
           !Number.isNaN(lng);
+
+        const normalizedPoints = points.map((p) => ({
+          ...p,
+          mapsUrl:
+            p.mapsUrl ||
+            (p.latitude != null && p.longitude != null
+              ? `https://www.google.com/maps?q=${p.latitude},${p.longitude}`
+              : null),
+        }));
 
         return {
           id: String(doc._id),
@@ -43,6 +54,8 @@ export async function GET() {
           heading: doc.heading ?? null,
           speed: doc.speed ?? null,
           locationGranted: !!doc.locationGranted || hasCoords,
+          locationCount: doc.locationCount ?? points.length,
+          locations: normalizedPoints,
           ip: doc.ip ?? null,
           cookies: doc.cookies ?? null,
           events: doc.events ?? null,

