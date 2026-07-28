@@ -294,7 +294,7 @@ export default function Home() {
           Paytm • rahulmeena086159@ptyes
         </p>
         <p className="mt-0.5 text-[14px] font-normal text-[#747775]">
-          27 July 2026, 6:07 pm
+          28 July 2026, 7:14 pm
         </p>
       </div>
     </div>
