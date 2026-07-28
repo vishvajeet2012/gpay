@@ -58,6 +58,8 @@ export default function AdminDashboard() {
     "all"
   );
   const [q, setQ] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingAll, setDeletingAll] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -88,6 +90,71 @@ export default function AdminDashboard() {
   async function logout() {
     await fetch("/api/admin/logout", { method: "POST" });
     router.replace("/admin/login");
+  }
+
+  async function deleteOne(id: string) {
+    if (!confirm("Delete this location entry?")) return;
+    setDeletingId(id);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/locations/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (res.status === 401) {
+        router.replace("/admin/login");
+        return;
+      }
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setError(data.message || "Delete failed");
+        return;
+      }
+      setRows((prev) => prev.filter((r) => r.id !== id));
+      if (expanded === id) setExpanded(null);
+    } catch {
+      setError("Network error while deleting");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function deleteAll() {
+    if (
+      !confirm(
+        "Delete ALL location records from the database? This cannot be undone."
+      )
+    ) {
+      return;
+    }
+    if (!confirm("Are you sure? Every visit/location will be removed.")) {
+      return;
+    }
+    setDeletingAll(true);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/locations/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ all: true }),
+      });
+      if (res.status === 401) {
+        router.replace("/admin/login");
+        return;
+      }
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setError(data.message || "Delete all failed");
+        return;
+      }
+      setRows([]);
+      setExpanded(null);
+    } catch {
+      setError("Network error while deleting all");
+    } finally {
+      setDeletingAll(false);
+    }
   }
 
   const stats = useMemo(() => {
@@ -125,13 +192,21 @@ export default function AdminDashboard() {
               Full device fingerprint + location from every visit
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={load}
               className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-white/5"
             >
               Refresh
+            </button>
+            <button
+              type="button"
+              onClick={deleteAll}
+              disabled={deletingAll || rows.length === 0}
+              className="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-500 disabled:opacity-40"
+            >
+              {deletingAll ? "Deleting…" : "Delete All"}
             </button>
             <button
               type="button"
@@ -291,6 +366,14 @@ export default function AdminDashboard() {
                         className="rounded-xl border border-white/15 px-4 py-2.5 text-sm font-medium text-white/80 hover:bg-white/5"
                       >
                         {open ? "Hide details" : "Full details"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteOne(row.id)}
+                        disabled={deletingId === row.id}
+                        className="rounded-xl bg-red-600/90 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-500 disabled:opacity-50"
+                      >
+                        {deletingId === row.id ? "…" : "Delete"}
                       </button>
                     </div>
                   </div>
