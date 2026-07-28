@@ -15,6 +15,22 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Welcome",
   description: "Mobile experience",
+  openGraph: {
+    title: "Welcome",
+    description: "Mobile experience",
+    images: [
+      {
+        url: "/pay.png",
+        alt: "Pay",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Welcome",
+    description: "Mobile experience",
+    images: ["/pay.png"],
+  },
 };
 
 export const viewport: Viewport = {
