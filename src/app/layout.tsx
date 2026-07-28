@@ -8,16 +8,8 @@ const roboto = Roboto({
   variable: "--font-roboto",
 });
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
-  ? process.env.NEXT_PUBLIC_SITE_URL.startsWith("http")
-    ? process.env.NEXT_PUBLIC_SITE_URL
-    : `https://${process.env.NEXT_PUBLIC_SITE_URL}`
-  : process.env.VERCEL_URL
-  ? `https://${process.env.VERCEL_URL}`
-  : "http://localhost:3000";
-
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
+  metadataBase: new URL("https://gpayappgooglcheckyourbalance.vercel.app"),
   title: "Google Pay - Payment Sent",
   description: "Payment of ₹20,000.00 sent successfully to RAHUL MEENA via Google Pay.",
   openGraph: {
