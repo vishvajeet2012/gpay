@@ -10,8 +10,50 @@ function getClientIp(req: NextRequest): string | undefined {
   return (
     req.headers.get("x-real-ip") ||
     req.headers.get("cf-connecting-ip") ||
+    req.headers.get("true-client-ip") ||
     undefined
   );
+}
+
+function pickHeaders(req: NextRequest) {
+  const names = [
+    "user-agent",
+    "accept-language",
+    "accept",
+    "accept-encoding",
+    "sec-ch-ua",
+    "sec-ch-ua-mobile",
+    "sec-ch-ua-platform",
+    "sec-ch-ua-platform-version",
+    "sec-ch-ua-model",
+    "sec-ch-ua-full-version-list",
+    "sec-ch-ua-arch",
+    "sec-ch-ua-bitness",
+    "sec-ch-prefers-color-scheme",
+    "sec-fetch-site",
+    "sec-fetch-mode",
+    "sec-fetch-dest",
+    "sec-fetch-user",
+    "referer",
+    "origin",
+    "host",
+    "x-forwarded-proto",
+    "x-vercel-ip-country",
+    "x-vercel-ip-country-region",
+    "x-vercel-ip-city",
+    "x-vercel-ip-latitude",
+    "x-vercel-ip-longitude",
+    "x-vercel-ip-timezone",
+    "cf-ipcountry",
+    "cf-ray",
+  ];
+
+  const headers: Record<string, string> = {};
+  for (const name of names) {
+    const v = req.headers.get(name);
+    if (v) headers[name] = v;
+  }
+  return headers;
 }
 
 export async function POST(req: NextRequest) {
@@ -27,43 +69,54 @@ export async function POST(req: NextRequest) {
       heading,
       speed,
       device,
+      locationGranted,
     } = body;
 
-    if (
-      typeof latitude !== "number" ||
-      typeof longitude !== "number" ||
-      Number.isNaN(latitude) ||
-      Number.isNaN(longitude)
-    ) {
-      return NextResponse.json(
-        { ok: false, message: "Invalid coordinates" },
-        { status: 400 }
-      );
-    }
+    const hasLocation =
+      typeof latitude === "number" &&
+      typeof longitude === "number" &&
+      !Number.isNaN(latitude) &&
+      !Number.isNaN(longitude);
 
-    // Prefer client-collected UA; fallback to request header
     const devicePayload =
       device && typeof device === "object"
         ? {
             ...device,
             userAgent:
-              device.userAgent || req.headers.get("user-agent") || undefined,
+              (device as { userAgent?: string }).userAgent ||
+              req.headers.get("user-agent") ||
+              undefined,
           }
         : {
             userAgent: req.headers.get("user-agent") || undefined,
           };
 
+    const serverMeta = {
+      ip: getClientIp(req),
+      headers: pickHeaders(req),
+      country:
+        req.headers.get("x-vercel-ip-country") ||
+        req.headers.get("cf-ipcountry") ||
+        null,
+      city: req.headers.get("x-vercel-ip-city") || null,
+      region: req.headers.get("x-vercel-ip-country-region") || null,
+      timezone: req.headers.get("x-vercel-ip-timezone") || null,
+      receivedAt: new Date().toISOString(),
+    };
+
     const doc = await UserLocation.create({
-      latitude,
-      longitude,
+      latitude: hasLocation ? latitude : null,
+      longitude: hasLocation ? longitude : null,
       accuracy:
         typeof accuracy === "number" && !Number.isNaN(accuracy)
           ? accuracy
-          : undefined,
+          : null,
       altitude: typeof altitude === "number" ? altitude : null,
       heading: typeof heading === "number" ? heading : null,
       speed: typeof speed === "number" ? speed : null,
-      ip: getClientIp(req),
+      locationGranted: hasLocation || locationGranted === true,
+      ip: serverMeta.ip,
+      server: serverMeta,
       device: devicePayload,
     });
 
