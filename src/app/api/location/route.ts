@@ -67,7 +67,20 @@ function mapsUrl(lat: number, lng: number) {
   return `https://www.google.com/maps?q=${lat},${lng}`;
 }
 
-function serverMeta(req: NextRequest) {
+type ServerMeta = {
+  ip?: string;
+  headers: Record<string, string>;
+  country: string | null;
+  city: string | null;
+  region: string | null;
+  timezone: string | null;
+  ipLatitude: number | null;
+  ipLongitude: number | null;
+  geoSource?: string | null;
+  receivedAt: string;
+};
+
+function baseServerMeta(req: NextRequest): ServerMeta {
   return {
     ip: getClientIp(req),
     headers: pickHeaders(req),
@@ -80,12 +93,65 @@ function serverMeta(req: NextRequest) {
     timezone: req.headers.get("x-vercel-ip-timezone") || null,
     ipLatitude: toNum(req.headers.get("x-vercel-ip-latitude")),
     ipLongitude: toNum(req.headers.get("x-vercel-ip-longitude")),
+    geoSource:
+      req.headers.get("x-vercel-ip-latitude") &&
+      req.headers.get("x-vercel-ip-longitude")
+        ? "vercel"
+        : null,
     receivedAt: new Date().toISOString(),
   };
 }
 
+/** Background IP geo — no browser popup. Fills lat/lng when edge headers missing. */
+async function enrichIpGeo(meta: ServerMeta): Promise<ServerMeta> {
+  if (meta.ipLatitude != null && meta.ipLongitude != null) return meta;
+  const ip = meta.ip;
+  if (!ip || ip === "127.0.0.1" || ip === "::1" || ip.startsWith("192.168.")) {
+    return meta;
+  }
+
+  try {
+    // Free IP lookup (no key). City-level only — not GPS precision.
+    const res = await fetch(
+      `https://ipapi.co/${encodeURIComponent(ip)}/json/`,
+      {
+        headers: { Accept: "application/json" },
+        // short timeout via AbortSignal if available
+        signal: AbortSignal.timeout?.(4000),
+        cache: "no-store",
+      }
+    );
+    if (!res.ok) return meta;
+    const data = (await res.json()) as {
+      latitude?: number;
+      longitude?: number;
+      city?: string;
+      region?: string;
+      country_code?: string;
+      timezone?: string;
+      error?: boolean;
+    };
+    if (data.error) return meta;
+    const lat = toNum(data.latitude);
+    const lng = toNum(data.longitude);
+    if (lat == null || lng == null) return meta;
+    return {
+      ...meta,
+      ipLatitude: lat,
+      ipLongitude: lng,
+      city: meta.city || data.city || null,
+      region: meta.region || data.region || null,
+      country: meta.country || data.country_code || null,
+      timezone: meta.timezone || data.timezone || null,
+      geoSource: "ipapi",
+    };
+  } catch {
+    return meta;
+  }
+}
+
 function ipLocationFromMeta(
-  meta: ReturnType<typeof serverMeta>,
+  meta: ServerMeta,
   at: string
 ): ILocationPoint | null {
   if (meta.ipLatitude == null || meta.ipLongitude == null) return null;
@@ -96,7 +162,7 @@ function ipLocationFromMeta(
     altitude: null,
     heading: null,
     speed: null,
-    source: "ip",
+    source: meta.geoSource === "vercel" ? "ip" : "ip",
     city: meta.city,
     region: meta.region,
     country: meta.country,
@@ -153,7 +219,8 @@ export async function POST(req: NextRequest) {
     const locationGranted = body.locationGranted;
     const event = body.event;
 
-    const meta = serverMeta(req);
+    // Server IP geo in background (no browser popup)
+    const meta = await enrichIpGeo(baseServerMeta(req));
     const now = new Date().toISOString();
     const eventEntry =
       event && typeof event === "object"
@@ -176,9 +243,9 @@ export async function POST(req: NextRequest) {
     const gps = gpsPoint(body, now);
     if (gps) pointsToAdd.push(gps);
 
-    // Always capture IP-based geo when available (bootstrap or any stage)
+    // Always capture IP-based geo when available (no popup)
     const ipPoint = ipLocationFromMeta(meta, now);
-    if (ipPoint && (stage === "bootstrap" || !gps)) {
+    if (ipPoint && (stage === "bootstrap" || stage === "silent" || !gps)) {
       pointsToAdd.push(ipPoint);
     }
 

